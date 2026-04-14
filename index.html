@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SWIFT Poultry Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1d73a5',
+                        secondary: '#38a3d1',
+                        accent: '#FFDF00',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .toast-enter { animation: slideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translate(-50%, -100%); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        .loader {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid #FFDF00;
+            width: 24px; height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex justify-center text-white h-screen overflow-hidden bg-slate-900">
+
+    <div id="app-container" class="w-full max-w-md bg-gradient-to-br from-secondary to-primary h-full relative flex flex-col shadow-2xl overflow-hidden">
+        
+        <!-- Header -->
+        <header class="px-5 py-4 flex justify-between items-center z-20 sticky top-0 bg-gradient-to-r from-primary/95 to-secondary/95 backdrop-blur-xl border-b border-white/20">
+            <div class="flex items-center gap-3">
+                <button id="btn-back" class="hidden p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors shadow-sm border border-white/20">
+                    <i class="ph ph-caret-left text-xl"></i>
+                </button>
+                <div id="header-logo" class="relative">
+                    <img id="custom-logo-img" src="https://images.unsplash.com/photo-1599422314077-f4dfdaa4cd09?w=150&h=150&fit=crop&crop=faces&q=80" alt="Logo" class="w-11 h-11 rounded-xl border-2 border-white/30 object-cover shadow-md bg-white/50" />
+                    <div class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-400 border-2 border-primary rounded-full shadow-sm"></div>
+                </div>
+                <div class="flex flex-col">
+                    <h1 class="font-black text-[18px] tracking-wide truncate text-accent drop-shadow-md leading-tight">
+                        SWIFT® Tracker
+                    </h1>
+                    <span id="header-subtitle" class="text-[10px] uppercase tracking-widest text-white/80 font-bold mt-0.5 hidden"></span>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="network-status" class="bg-white/10 p-2 rounded-xl border border-white/10 shadow-sm">
+                    <i class="ph ph-wifi-high text-white/90"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="flex-1 overflow-y-auto p-4 relative z-0 no-scrollbar pb-24">
+            
+            <!-- Loading -->
+            <div id="view-loading" class="h-full flex flex-col items-center justify-center space-y-4">
+                <div class="loader w-12 h-12 border-4"></div>
+                <p class="font-semibold text-lg text-white/90">Loading...</p>
+            </div>
+
+            <!-- Login -->
+            <div id="view-login" class="hidden mt-20 p-6 glass-panel rounded-2xl mx-4 text-center">
+                <i class="ph ph-activity text-5xl text-white/90 mb-4 block"></i>
+                <h2 class="text-xl font-bold mb-2 text-accent drop-shadow-sm">Welcome to SWIFT Tracker</h2>
+                <p class="text-white/70 text-sm">Please log in to manage farms.</p>
+                <button onclick="window.location.reload()" class="w-full mt-6 bg-white text-primary p-3 rounded-lg font-bold shadow-lg hover:bg-sky-50 transition-colors">
+                    Login / Refresh
+                </button>
+            </div>
+
+            <!-- Dashboard -->
+            <div id="view-dashboard" class="hidden space-y-6 animate-fade-in">
+                <div id="dash-stats-container"></div>
+                <div id="dash-recommendations"></div>
+                <div id="dash-quick-actions"></div>
+            </div>
+
+            <!-- Farms Directory -->
+            <div id="view-farms" class="hidden space-y-4 animate-fade-in">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-white text-lg">Farm Directory</h2>
+                    <button data-action="nav-add-farm" class="text-white font-medium text-xs flex items-center gap-1 bg-white/20 border border-white/30 px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors shadow-sm">
+                        <i class="ph ph-plus"></i> New Farm
+                    </button>
+                </div>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                        <i class="ph ph-magnifying-glass text-white/50"></i>
+                    </div>
+                    <input type="text" id="farm-search" placeholder="Search by name, district, or area..." class="w-full border border-white/30 p-3.5 pl-10 rounded-xl bg-white/10 text-white placeholder-white/60 focus:bg-white/20 focus:border-white text-sm outline-none transition-all shadow-sm" />
+                </div>
+                <div id="farms-list-container" class="space-y-3"></div>
+            </div>
+
+            <!-- Add Farm -->
+            <div id="view-add-farm" class="hidden space-y-4 animate-fade-in">
+                <form id="form-add-farm" class="space-y-4 pb-10">
+                    <div class="glass-panel p-5 rounded-xl space-y-4">
+                        <h3 class="font-bold text-white border-b border-white/20 pb-2">Farm Details</h3>
+                        <input required type="text" id="af-name" placeholder="Farm Name" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white placeholder-white/60 focus:bg-white/20 outline-none text-sm" />
+                        <input required type="text" id="af-owner" placeholder="Owner Name" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white placeholder-white/60 focus:bg-white/20 outline-none text-sm" />
+                        <input required type="tel" id="af-phone" placeholder="Phone Number" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white placeholder-white/60 focus:bg-white/20 outline-none text-sm" />
+                        <select id="af-type" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white outline-none text-sm shadow-sm">
+                            <option class="text-slate-800 bg-white" value="Broiler">Broiler</option>
+                            <option class="text-slate-800 bg-white" value="Layer">Layer</option>
+                            <option class="text-slate-800 bg-white" value="Breeder">Breeder</option>
+                        </select>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-xl space-y-4">
+                        <h3 class="font-bold text-white border-b border-white/20 pb-2">Location Setup</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <select required id="af-district" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white outline-none text-sm shadow-sm">
+                                <option value="" disabled selected class="text-slate-800 bg-white">Select District</option>
+                                <!-- Districts injected here -->
+                            </select>
+                            <select required id="af-mun" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white/50 outline-none text-sm shadow-sm" disabled>
+                                <option value="" disabled selected class="text-slate-800 bg-white">Municipality</option>
+                                <!-- Municipalities injected here -->
+                            </select>
+                        </div>
+                        <input type="text" id="af-custom-mun" placeholder="Type Municipality Manually..." class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm hidden" />
+                        
+                        <select required id="af-ward" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white outline-none text-sm shadow-sm">
+                            <option value="" disabled selected class="text-slate-800 bg-white">Ward No.</option>
+                            <!-- Wards 1-35 -->
+                        </select>
+                        
+                        <div class="pt-2">
+                            <button type="button" id="btn-capture-loc" class="w-full py-3.5 rounded-xl flex items-center justify-center gap-2 font-bold text-sm bg-white/10 border border-white/30 hover:bg-white/20 transition-all shadow-sm">
+                                <i class="ph ph-map-pin"></i> Capture GPS Location
+                            </button>
+                            <p id="loc-status" class="text-center text-[10px] text-white/80 mt-2 font-mono hidden bg-white/10 py-1 rounded-md"></p>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="btn-save-farm" class="w-full bg-white text-primary p-4 rounded-xl font-bold shadow-lg hover:bg-sky-50 active:scale-95 transition-all uppercase tracking-wide">
+                        Save Farm
+                    </button>
+                </form>
+            </div>
+
+            <!-- Farm Details -->
+            <div id="view-farm-details" class="hidden space-y-4 animate-fade-in pb-10">
+                <div id="farm-header-container"></div>
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-white text-lg">Batches</h3>
+                        <button id="btn-add-batch-nav" class="text-white bg-white/20 border border-white/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-white/30 transition-colors shadow-sm">
+                            <i class="ph ph-plus"></i> Add Batch
+                        </button>
+                    </div>
+                    <div id="farm-batches-list" class="space-y-4"></div>
+                </div>
+            </div>
+
+            <!-- Add Batch -->
+            <div id="view-add-batch" class="hidden space-y-4 animate-fade-in">
+                <form id="form-add-batch" class="space-y-4">
+                    <div class="glass-panel p-5 rounded-xl space-y-4">
+                        <h3 class="font-bold text-white border-b border-white/20 pb-2">Batch Information</h3>
+                        <div>
+                            <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Batch Name / ID</label>
+                            <input required type="text" id="ab-name" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Chick Arrival Date</label>
+                            <input required type="date" id="ab-date" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm" style="color-scheme: dark;" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Chicks Placed</label>
+                                <input required type="number" id="ab-chicks" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none font-bold text-sm" />
+                            </div>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Breed/Strain</label>
+                                <input required type="text" id="ab-breed" placeholder="e.g. Cobb 500" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm" />
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" id="btn-save-batch" class="w-full bg-white text-primary p-4 rounded-xl font-bold shadow-lg hover:bg-sky-50 active:scale-95 transition-all uppercase tracking-wide">
+                        Start Batch
+                    </button>
+                </form>
+            </div>
+
+            <!-- Close Batch -->
+            <div id="view-close-batch" class="hidden space-y-4 animate-fade-in">
+                <form id="form-close-batch" class="space-y-4">
+                    <div class="glass-panel p-5 rounded-xl space-y-4">
+                        <div class="border-b border-white/20 pb-3 mb-2">
+                            <h3 class="font-bold text-white text-lg flex items-center gap-2"><i class="ph ph-package"></i> Record Batch Sale</h3>
+                            <p class="text-white/70 text-xs mt-1">This will permanently archive the batch.</p>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Sale Date</label>
+                            <input required type="date" id="cb-date" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm" style="color-scheme: dark;" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Total Birds Sold</label>
+                                <input required type="number" id="cb-sold" placeholder="Qty" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none font-bold text-center text-sm" />
+                            </div>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Final Avg Weight (g)</label>
+                                <input required type="number" id="cb-weight" placeholder="Grams" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none font-bold text-center text-sm" />
+                            </div>
+                        </div>
+                        <div id="cb-harvest-mass" class="mt-4 p-4 bg-black/10 rounded-xl border border-white/10 text-center hidden">
+                            <p class="text-[10px] uppercase font-bold text-white/60 mb-1">Total Harvest Mass</p>
+                            <p class="font-black text-2xl text-white"><span id="cb-mass-val"></span> <span class="text-sm font-medium opacity-70">kg</span></p>
+                        </div>
+                    </div>
+                    <button type="submit" id="btn-save-close" class="w-full bg-red-500 hover:bg-red-400 text-white p-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all uppercase tracking-wide">
+                        Confirm Sale & Close Batch
+                    </button>
+                </form>
+            </div>
+
+            <!-- Add Visit -->
+            <div id="view-add-visit" class="hidden space-y-4 animate-fade-in pb-10">
+                <div id="visit-header-info" class="glass-panel text-white -mx-4 -mt-4 p-5 pb-6 mb-2 rounded-b-2xl shadow-sm border-b border-white/20"></div>
+
+                <div class="flex bg-black/10 rounded-xl p-1 shadow-inner border border-white/10 mb-5 sticky top-0 z-10 backdrop-blur-sm">
+                    <button class="visit-tab-btn flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors bg-white text-primary shadow-sm" data-tab="tab-perf">Performance</button>
+                    <button class="visit-tab-btn flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors text-white/70 hover:text-white" data-tab="tab-health">Health</button>
+                    <button class="visit-tab-btn flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors text-white/70 hover:text-white" data-tab="tab-necropsy">Necropsy</button>
+                </div>
+
+                <form id="form-add-visit">
+                    <!-- Performance Tab -->
+                    <div id="tab-perf" class="visit-tab space-y-4 animate-fade-in">
+                        <div class="glass-panel p-5 rounded-xl">
+                            <div class="flex gap-4 mb-5">
+                                <div class="flex-1">
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Date</label>
+                                    <input required type="date" id="av-date" class="w-full border-b-2 border-white/30 focus:border-white py-1.5 bg-transparent text-sm font-bold text-white outline-none" style="color-scheme:dark" />
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Age (Days)</label>
+                                    <input type="number" id="av-age" class="w-full border-b-2 border-white/30 py-1.5 bg-transparent text-xl font-black text-white text-center outline-none" readonly />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Avg Daily Mortality</label>
+                                    <input required type="number" id="av-mort" value="0" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white font-bold outline-none text-center text-lg" />
+                                    <div id="av-mort-calc" class="mt-2 text-[10px] text-center text-white/70 bg-black/10 rounded py-1 border border-white/5 hidden"></div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Avg Body Wt (g)</label>
+                                    <input required type="number" id="av-weight" placeholder="Grams" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white font-bold outline-none text-center text-lg" />
+                                </div>
+                            </div>
+                            <div class="mt-5 p-3.5 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center text-sm shadow-inner">
+                                <span class="text-white/80 font-bold uppercase tracking-wider text-[11px]">Est. Live Birds</span>
+                                <span id="av-live-birds" class="font-bold text-white text-lg">0</span>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-xl">
+                            <h3 class="font-bold text-white mb-4 flex items-center gap-2"><i class="ph ph-drop"></i> Feed Data</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Feed Type</label>
+                                    <select id="av-feed-type" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white text-sm outline-none shadow-sm">
+                                        <option class="text-slate-800 bg-white">Pre-Starter</option>
+                                        <option class="text-slate-800 bg-white">Starter</option>
+                                        <option class="text-slate-800 bg-white">Grower</option>
+                                        <option class="text-slate-800 bg-white">Finisher</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Period Feed (kg)</label>
+                                    <input required type="number" step="0.1" id="av-feed-qty" placeholder="Kg" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white font-bold outline-none shadow-inner" />
+                                    <div id="av-feed-calc" class="mt-2 text-[10px] text-center text-white/70 bg-black/10 rounded py-1 border border-white/5 hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Layer Specific Data -->
+                        <div id="layer-perf-section" class="glass-panel p-5 rounded-xl hidden">
+                            <h3 class="font-bold text-white mb-4 flex items-center gap-2 text-lg">🥚 Layer Production Data</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Daily Egg Count</label>
+                                    <input type="number" id="av-layer-eggs" placeholder="Total Eggs" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white font-bold outline-none text-center" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Predominant Size</label>
+                                    <select id="av-layer-size" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white text-sm outline-none shadow-sm">
+                                        <option class="text-slate-800 bg-white">Large</option>
+                                        <option selected class="text-slate-800 bg-white">Medium</option>
+                                        <option class="text-slate-800 bg-white">Small</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-2 pt-2">
+                                     <label class="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-black/10 border border-white/10 w-full justify-center hover:bg-black/20 transition-all">
+                                        <input type="checkbox" id="av-layer-peak" class="rounded text-[#1d73a5] focus:ring-white bg-white/50 border-transparent w-4 h-4" />
+                                        <span class="text-[10px] uppercase tracking-wider font-bold text-white">Peak Period</span>
+                                     </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="av-summary-stats" class="glass-panel p-5 rounded-xl grid grid-cols-2 gap-4 shadow-[0_4px_20px_rgba(0,0,0,0.1)]">
+                            <div>
+                                <p class="text-[10px] uppercase font-bold tracking-widest text-white/70 mb-1">Cum. Mort. %</p>
+                                <p class="text-2xl font-black text-white"><span id="av-stat-mort">0</span><span class="text-base font-bold opacity-80">%</span></p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] uppercase font-bold tracking-widest text-white/70 mb-1">Est. FCR</p>
+                                <p id="av-stat-fcr" class="text-2xl font-black text-white">--</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Health Tab -->
+                    <div id="tab-health" class="visit-tab hidden space-y-4 animate-fade-in">
+                        <div class="glass-panel p-5 rounded-xl space-y-4">
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Observed Symptoms</label>
+                                <textarea id="av-symp" rows="2" placeholder="e.g., Sneezing, lethargy..." class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Diagnosis / Suspicion</label>
+                                <input type="text" id="av-diag" placeholder="e.g., CRD, Coccidiosis" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm font-bold" />
+                            </div>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Prescribed Treatment</label>
+                                <input type="text" id="av-treat" placeholder="Medicines/Actions advised" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm" />
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-xl">
+                            <h3 class="font-bold text-white mb-4 flex items-center gap-2"><i class="ph ph-thermometer text-white/80"></i> Environment</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><input type="number" id="av-temp" placeholder="Temp (°C)" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm font-bold text-center" /></div>
+                                <div><input type="number" id="av-hum" placeholder="Humidity (%)" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm font-bold text-center" /></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-xl space-y-4">
+                             <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">General Remarks / Notes</label>
+                             <textarea id="av-rem" rows="2" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm"></textarea>
+                        </div>
+
+                        <!-- Layer Health Diagnostics -->
+                        <div id="layer-health-section" class="glass-panel p-5 rounded-xl space-y-4 hidden">
+                            <h3 class="font-bold text-white flex items-center gap-2 border-b border-white/20 pb-3"><i class="ph ph-activity text-yellow-400"></i> Layer Diagnostics</h3>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Egg Shell Quality</label>
+                                <select id="av-layer-quality" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white text-sm outline-none shadow-sm">
+                                    <option class="text-slate-800 bg-white">Normal</option>
+                                    <option class="text-slate-800 bg-white">Thin Shelled</option>
+                                    <option class="text-slate-800 bg-white">Hypopigmentation</option>
+                                    <option class="text-slate-800 bg-white">Hyperpigmentation</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-2">Common Layer Issues</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition-all bg-black/10 border-white/10 text-white/70">
+                                        <input type="checkbox" id="av-layer-prolapse" class="rounded text-red-500 bg-white/50 border-transparent" />
+                                        <span class="text-xs font-bold">Vent Prolapse</span>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer select-none transition-all bg-black/10 border-white/10 text-white/70">
+                                        <input type="checkbox" id="av-layer-cannibalism" class="rounded text-red-500 bg-white/50 border-transparent" />
+                                        <span class="text-xs font-bold">Cannibalism</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Necropsy Tab -->
+                    <div id="tab-necropsy" class="visit-tab hidden space-y-4 animate-fade-in">
+                        <div class="glass-panel p-5 rounded-xl">
+                            <div class="flex items-center gap-3 mb-5 border-b border-white/20 pb-4">
+                                <div class="bg-white/20 p-2.5 rounded-lg border border-white/30 text-white"><i class="ph ph-syringe text-xl"></i></div>
+                                <div>
+                                    <h3 class="font-bold text-white text-lg">Post-Mortem Record</h3>
+                                    <p class="text-[11px] font-medium text-white/70 mt-0.5">Upload photos to Secure Cloud</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-5">
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Birds Examined</label>
+                                <input type="number" id="av-nec-exam" placeholder="Quantity" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white font-bold outline-none" />
+                            </div>
+
+                            <div class="mb-5">
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-2">Lesion Checklist</label>
+                                <div class="grid grid-cols-2 gap-2" id="lesion-checkboxes">
+                                    <!-- Populated via JS -->
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <label class="block text-[11px] uppercase tracking-wider font-bold text-white/80 mb-1.5">Lesion Description</label>
+                                <textarea id="av-nec-desc" rows="2" placeholder="Describe specific findings..." class="w-full border border-white/30 p-3.5 rounded-lg bg-black/10 text-white outline-none text-sm"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-xl">
+                            <h3 class="font-bold text-white mb-4 flex items-center gap-2">Image Attachments</h3>
+                            <div class="grid grid-cols-3 gap-3 mb-3" id="av-image-preview-container">
+                                <!-- Images injected here -->
+                                <button type="button" id="btn-trigger-upload" class="aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed border-white/40 rounded-xl text-white/70 hover:bg-white/10 hover:border-white hover:text-white transition-colors bg-black/5">
+                                    <i class="ph ph-camera text-2xl"></i>
+                                    <span class="text-[10px] font-bold uppercase tracking-widest">Add Photo</span>
+                                </button>
+                            </div>
+                            <input type="file" multiple accept="image/*" class="hidden" id="av-image-input" />
+                            <p class="text-[10px] text-white/60 text-center font-medium mt-4">Images are compressed for offline storage.</p>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 mt-5 border-t border-white/20 sticky bottom-[70px] bg-[#2a8ebd]/90 backdrop-blur-md pb-2 -mx-4 px-4">
+                        <button type="submit" id="btn-save-visit" class="w-full bg-white text-primary p-4 rounded-xl font-bold shadow-[0_5px_15px_rgba(0,0,0,0.15)] active:scale-95 hover:bg-sky-50 transition-all flex justify-center items-center gap-2 text-base uppercase tracking-wide">
+                            <i class="ph-fill ph-check-circle text-xl"></i> Save Visit Record
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Settings View -->
+            <div id="view-settings" class="hidden space-y-4 animate-fade-in">
+                 <div class="glass-panel p-6 rounded-xl text-center">
+                    <h3 class="font-bold text-white mb-6 text-sm uppercase tracking-widest">Company Profile</h3>
+                    <div class="flex justify-center mb-6">
+                        <img id="settings-logo-preview" src="https://images.unsplash.com/photo-1599422314077-f4dfdaa4cd09?w=150&h=150&fit=crop&crop=faces&q=80" alt="Custom Logo" class="w-24 h-24 rounded-2xl object-cover shadow-lg border-2 border-white/50 bg-white" />
+                    </div>
+                    <button id="btn-trigger-logo" class="bg-white text-primary px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest shadow-md active:scale-95 transition-all hover:bg-sky-50">
+                        Upload Custom Logo
+                    </button>
+                    <input type="file" accept="image/*" class="hidden" id="settings-logo-input" />
+                    <p class="text-[10px] text-white/70 mt-5 font-medium">Used across reports and the main dashboard header.</p>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="fixed bottom-0 w-full max-w-md bg-primary/95 backdrop-blur-md border-t border-white/20 flex justify-around py-3 z-20 text-xs font-medium text-white/60 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] pb-safe">
+            <button data-nav="dashboard" class="nav-item flex flex-col items-center gap-1.5 flex-1 transition-colors text-white font-bold">
+                <i class="ph ph-house text-xl"></i><span>Home</span>
+            </button>
+            <button data-nav="farms" class="nav-item flex flex-col items-center gap-1.5 flex-1 transition-colors hover:text-white/80">
+                <i class="ph ph-map-pin text-xl"></i><span>Farms</span>
+            </button>
+            <button id="btn-export" class="flex flex-col items-center gap-1.5 flex-1 hover:text-white/80 transition-colors">
+                <i class="ph ph-file-xls text-xl"></i><span>Export</span>
+            </button>
+            <button data-nav="settings" class="nav-item flex flex-col items-center gap-1.5 flex-1 hover:text-white/80 transition-colors">
+                <i class="ph ph-gear text-xl"></i><span>Settings</span>
+            </button>
+        </nav>
+
+        <!-- Toast Container -->
+        <div id="toast-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-sm hidden">
+            <div id="toast-body" class="px-6 py-3 rounded-full shadow-lg flex items-center gap-2 transition-all font-medium justify-center bg-white/20 text-white backdrop-blur-md border border-white/30">
+                <i id="toast-icon" class="ph ph-info text-lg"></i>
+                <span id="toast-msg" class="text-sm">Message</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase & Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+        // --- Configuration & Initialization ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-poultry-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        // --- State Management ---
+        const state = {
+            user: null, farms: [], batches: [], visits: [], settings: null,
+            currentView: 'loading', viewParams: {}, unsubs: [],
+            necropsyImages: [] // holds base64 strings
+        };
+
+        // --- Nepal Locations Data ---
+        const nepalLocations = {
+            "Achham": ["Bannigadhi Jayagadh", "Chaurpati", "Dhakari", "Kamalbazar", "Mangalsen", "Mellekh", "Panchadewal Binayak", "Ramaroshan", "Sanphebagar", "Turmakhad"],
+            "Arghakhanchi": ["Bhumekasthan", "Chhatradev", "Malarani", "Panini", "Sandhikharka", "Shitaganga"],
+            "Baglung": ["Baglung", "Bareng", "Dhorpatan", "Galkot", "Jaimini", "Kanthekhola", "Nisikhola", "Taman Khola", "Tara Khola", "Badigad"],
+            "Baitadi": ["Amargadhi", "Dasharathchand", "Dilashaini", "Dogadakedar", "Melauli", "Pancheshwar", "Patarya", "Purchaudi", "Shivanath", "Sigas", "Surnaya"],
+            "Bajhang": ["Bithadchir", "Bungal", "Chabispathibhera", "Durgathali", "Jaya Prithvi", "Kanda", "Kedarsyu", "Khaptadchhanna", "Masta", "Surma", "Talkot", "Thalara"],
+            "Bajura": ["Badimalika", "Budhiganga", "Budhinanda", "Chhededaha", "Gaumul", "Himali", "Jagannath", "Khaptad Chhededaha", "Pandav Gupha", "Swami Kartik", "Tribeni", "Tatopani"],
+            "Banke": ["Baijanath", "Duduwa", "Janaki", "Khajura", "Kohalpur", "Narainapur", "Nepalgunj", "Rapti Sonari"],
+            "Bara": ["Adarsh Kotwal", "Baragadhi", "Bishrampur", "Devtal", "Jitpur Simara", "Kalaiya", "Karaiyamai", "Kolhabi", "Mahagadhimai", "Nijgadh", "Pacharauta", "Parwanipur", "Pheta", "Prasauni", "Simraungadh", "Suwarna"],
+            "Bardiya": ["Badhaiyatal", "Bansgadhi", "Barbardiya", "Geruwa", "Gulariya", "Madhuwan", "Rajapur", "Thakurbaba"],
+            "Bhaktapur": ["Bhaktapur", "Changunarayan", "Madhyapur Thimi", "Suryabinayak"],
+            "Bhojpur": ["Aamchok", "Arun", "Bhojpur", "Hatuwagadhi", "Pauwadungma", "Ramprasad Rai", "Salpasilichho", "Shadanand", "Tyamke Maiyunm"],
+            "Chitwan": ["Bharatpur", "Ichchhakamana", "Kalika", "Khairahani", "Madi", "Rapti", "Ratnanagar"],
+            "Dadeldhura": ["Aalital", "Amargadhi", "Bhageshwar", "Navadurga", "Ganyapdhura", "Parshuram", "Ajayameru"],
+            "Dailekh": ["Aathabis", "Bhagawatimai", "Bhairabi", "Chamunda Bindrasaini", "Dullu", "Dungeshwar", "Gurans", "Mahabu", "Narayan", "Naumule", "Thantikandh"],
+            "Dang": ["Babai", "Banglachuli", "Dangisharan", "Gadhawa", "Ghorahi", "Lamahi", "Rajpur", "Rapti", "Shantinagar", "Tulsipur"],
+            "Darchula": ["Apihimal", "Byas", "Dunhu", "Lekam", "Mahakali", "Malikarjun", "Marma", "Naugad", "Shailyashikhar"],
+            "Dhading": ["Benighat Rorang", "Dhunibeshi", "Gajuri", "Galchhi", "Gangajamuna", "Jwalamukhi", "Khaniyabas", "Netrawati", "Nilkantha", "Rubi Valley", "Siddhalek", "Thakre", "Tripurasundari"],
+            "Dhankuta": ["Chhathar Jorpati", "Chaubise", "Dhankuta", "Khalasa Chhintang Sahidbhumi", "Mahalaxmi", "Pakhribas", "Sangurigadhi"],
+            "Dhanusha": ["Aaurahi", "Bateshwar", "Bideha", "Chhireshwarnath", "Dhanauji", "Dhanushadham", "Ganeshman Charnath", "Hansapur", "Janak Nandini", "Janakpurdham", "Kamala", "Mithila", "Mithila Bihari", "Mukhiyapatti Musharniya", "Nagarain", "Sabaila", "Sahidnagar", "Shahidnagar", "Vedeha"],
+            "Dolakha": ["Baiteshwar", "Bhimeshwar", "Bigu", "Gaurishankar", "Jiri", "Kalinchok", "Melung", "Sailung", "Tamakoshi"],
+            "Dolpa": ["Chharka Tangsong", "Dolpo Buddha", "Jagadulla", "Kaike", "Mudkechula", "Shey Phoksundo", "Thuli Bheri", "Tripurasundari"],
+            "Doti": ["Adarsha", "Badikedar", "Bogatan", "Dipayal Silgadhi", "Jorayal", "K.I. Singh", "Purbichauki", "Sayal", "Shikhar"],
+            "Eastern Rukum": ["Bhume", "Putha Uttarganga", "Sisne"],
+            "Gorkha": ["Aarughat", "Ajirkot", "Barpak Sulikot", "Bhimsen Thapa", "Chum Nubri", "Dharche", "Gandaki", "Gorkha", "Palungtar", "Sahid Lakhan", "Siranchowk"],
+            "Gulmi": ["Chandrakot", "Chatrakot", "Dhurkot", "Gulmidarbar", "Isma", "Kaligandaki", "Madane", "Malika", "Musikot", "Resunga", "Rurukshetra", "Satyawati"],
+            "Humla": ["Adanchuli", "Chankheli", "Kharpunath", "Namkha", "Sarkegad", "Simkot", "Tanjakot"],
+            "Ilam": ["Chulachuli", "Deumai", "Fakphokthum", "Ilam", "Mai Jogmai", "Mai", "Mangsebung", "Rong", "Sandakpur", "Suryodaya"],
+            "Jajarkot": ["Barekot", "Bheri", "Chhedagad", "Cushe", "Junichande", "Nalgad", "Shivalaya"],
+            "Jhapa": ["Arjundhara", "Barhadashi", "Bhadrapur", "Birtamod", "Buddhashanti", "Damak", "Gauradaha", "Gaurigunj", "Haldibari", "Jhapa Rural", "Kachankawal", "Kamal", "Kankai", "Mechinagar", "Shivasatakshi"],
+            "Jumla": ["Chandannath", "Guthichaur", "Hima", "Kanakasundari", "Patarasi", "Sinja", "Tatopani", "Tila"],
+            "Kailali": ["Bardagoriya", "Bhajani", "Chure", "Dhangadhi", "Gauriganga", "Ghodaghodi", "Janaki", "Joshipur", "Kailari", "Lamki Chuha", "Mohanyal", "Tikapur", "Godawari"],
+            "Kalikot": ["Khandachakra", "Mahawai", "Naraharinath", "Pachaljharana", "Palata", "Raskot", "Sanni Triveni", "Subha Kalika", "Tilagufa"],
+            "Kanchanpur": ["Bedkot", "Belauri", "Bhimdatta", "Dodhara Chandani", "Krishnapur", "Laljhadi", "Punarbas", "Shuklaphanta"],
+            "Kapilvastu": ["Baanganga", "Buddhabhumi", "Kapilvastu", "Krishnanagar", "Maharajganj", "Mayadevi", "Shivaraj", "Sudhodhan", "Yashodhara", "Bijaynagar"],
+            "Kaski": ["Annapurna", "Machhapuchchhre", "Madi", "Pokhara", "Rupa"],
+            "Kathmandu": ["Budhanilkantha", "Chandragiri", "Dakshinkali", "Gokarneshwar", "Kageshwori Manohara", "Kathmandu", "Kirtipur", "Nagarjun", "Shankharapur", "Tarakeshwar", "Tokha"],
+            "Kavrepalanchok": ["Banepa", "Bethanchowk", "Bhumlu", "Chaurideurali", "Dhulikhel", "Mahabharat", "Mandandeupur", "Namobuddha", "Panauti", "Panchkhal", "Roshi", "Temal"],
+            "Khotang": ["Aiselukharka", "Barahapokhari", "Diktel Rupakot Majhuwagadhi", "Diprung Chuichumma", "Halesi Tuwachung", "Jantedhunga", "Kepilasgadhi", "Khotehang", "Rawabesi", "Sakela"],
+            "Lalitpur": ["Bagmati", "Godawari", "Konjyosom", "Lalitpur", "Mahalaxmi", "Mahankal"],
+            "Lamjung": ["Besisahar", "Dordi", "Dudhpokhari", "Kwholasothar", "Madhya Nepal", "Marshyangdi", "Rainas", "Sundarbazar"],
+            "Mahottari": ["Aurahi", "Balawa", "Bardibas", "Bhangaha", "Ekdara", "Gaushala", "Jaleshwar", "Loharpatti", "Mahottari Rural", "Manra Siswa", "Matihani", "Pipra", "Ramgopalpur", "Samsi", "Sonama"],
+            "Makwanpur": ["Bagmati", "Bakaiya", "Bhimphedi", "Hetauda", "Indrasarowar", "Kailash", "Makawanpurgadhi", "Manahari", "Raksirang", "Thaha"],
+            "Manang": ["Chame", "Narpa Bhumi", "Nason", "Manang Ngisyang"],
+            "Morang": ["Belbari", "Biratnagar", "Budhiganga", "Dhanpalthan", "Gramthan", "Jahada", "Kanepokhari", "Katahari", "Kerabari", "Letang", "Miklajung", "Pathari Sanischare", "Rangeli", "Ratuwamai", "Sunawarshi", "Sundar Haraicha", "Urlabari"],
+            "Mugu": ["Chhayanath Rara", "Khatyad", "Mugum Karmarong", "Soru"],
+            "Mustang": ["Baragung Muktichhetra", "Gharapjhong", "Lo-Ghekar Damodarkunda", "Lomanthang", "Thasang"],
+            "Myagdi": ["Annapurna", "Beni", "Dhaulagiri", "Malika", "Mangala", "Raghuganga"],
+            "Nawalpur": ["Baudikali", "Binawyi Triveni", "Bulingtar", "Devchuli", "Gaindakot", "Hupsekot", "Kawasoti", "Madhyabindu"],
+            "Nuwakot": ["Belkotgadhi", "Bidur", "Dupcheshwar", "Kispang", "Likhu", "Myagang", "Panchakanya", "Shivapuri", "Suryagadhi", "Tadi", "Tarkeshwar", "Kakani"],
+            "Okhaldhunga": ["Champadevi", "Chishankhugadhi", "Khijidemba", "Likhu", "Manebhanjyang", "Molung", "Siddhicharan", "Sunkoshi"],
+            "Palpa": ["Bagnaskali", "Mathagadhi", "Nisdi", "Purbakhola", "Rambha", "Rampur", "Ribdikot", "Tansen", "Tinau", "Rainadevi Chhahara"],
+            "Panchthar": ["Falelung", "Falgunanda", "Hilihang", "Kummayak", "Miklajung", "Phidim", "Tumewa", "Yangwarak"],
+            "Parasi": ["Bardaghat", "Palhinandan", "Pratappur", "Ramgram", "Sarawal", "Sunwal", "Susta"],
+            "Parbat": ["Bihadi", "Jaljala", "Kushma", "Mahashila", "Modi", "Paiyun", "Phalebas"],
+            "Parsa": ["Bahudarmai", "Bindabasini", "Birgunj", "Chhipahrmai", "Dhobini", "Jagarnathpur", "Jirabhawani", "Kalikamai", "Pakahamainpur", "Parsagadhi", "Paterwa Sugauli", "Pokhariya", "Sakhuwa Prasauni", "Thori"],
+            "Pyuthan": ["Ayushmati", "Gaumukhi", "Jhimruk", "Mallarani", "Mandavi", "Naubahini", "Pyuthan", "Sarumarani", "Swargadwari"],
+            "Ramechhap": ["Doramba", "Gokulganga", "Khandadevi", "Likhu Tamakoshi", "Manthali", "Ramechhap", "Sunapati", "Umakunda"],
+            "Rasuwa": ["Aamachodingmo", "Gosaikunda", "Kalika", "Naukunda", "Uttargaya"],
+            "Rautahat": ["Baudhimai", "Brindaban", "Chandrapur", "Dewahi Gonahi", "Durga Bhagwati", "Fatuwa Bijayapur", "Garuda", "Gaur", "Gujara", "Ishanath", "Katahariya", "Madhav Narayan", "Maulapur", "Paroha", "Phatuwa Bijayapur", "Rajdevi", "Rajpur", "Yemunamai"],
+            "Rolpa": ["Gangadev", "Madi", "Paribartan", "Rolpa", "Runtigadhi", "Sunchhahari", "Suwarnawati", "Thawang", "Triveni"],
+            "Rupandehi": ["Butwal", "Devdaha", "Gaidahawa", "Kanchan", "Kotahimai", "Lumbini", "Marchawari", "Mayadevi", "Omsatiya", "Rohini", "Sainamaina", "Sammarimai", "Siddharthanagar", "Siyari", "Sudhodhan", "Tillotama"],
+            "Salyan": ["Bagchaur", "Bangad Kupinde", "Chhatreshwari", "Darma", "Kapurkot", "Kumakh", "Shaarda", "Siddha Kumakh", "Tribeni"],
+            "Sankhuwasabha": ["Bhotkhola", "Chainpur", "Chichila", "Dharmadevi", "Khandbari", "Madi", "Makalu", "Panchkhapan", "Sabhapokhari", "Silichong"],
+            "Saptari": ["Agnisair Krishna Savaran", "Balan-Bihul", "Bishnupur", "Bodebarsaien", "Chhinnamasta", "Dakneshwori", "Hanumannagar Kankalini", "Kanchanrup", "Khadak", "Mahadeva", "Rajbiraj", "Rupani", "Shambhunath", "Surunga", "Tilahathi", "Tirhut"],
+            "Sarlahi": ["Bagmati", "Balara", "Barahathwa", "Basbariya", "Brahmapuri", "Chakraghatta", "Chandranagar", "Dhankaul", "Godaita", "Haripur", "Haripurwa", "Hariwan", "Ishworpur", "Kaudena", "Lalbandi", "Malangwa", "Parsa", "Ramnagar", "Vishnu"],
+            "Sindhuli": ["Dudhouli", "Golanjor", "Ghyanglekh", "Hariharpurgadhi", "Kamalamai", "Marin", "Phikkal", "Sunkoshi", "Tinpatan"],
+            "Sindhupalchok": ["Balephi", "Bahrabise", "Bhotekoshi", "Chautara SangachokGadhi", "Helambu", "Indrawati", "Jugal", "Lisankhu Pakhar", "Melamchi", "Panchpokhari Thangpal", "Sunkoshi", "Tripurasundari"],
+            "Siraha": ["Arnama", "Aurahi", "Bariyarpatti", "Bhagawanpur", "Bishnupur", "Dhangadhimai", "Golbazar", "Kalyanpur", "Karjanha", "Lahan", "Lakshmipur Patari", "Mirchaiya", "Naraha", "Navarajpur", "Sakhuwanankarkatti", "Siraha", "Sukhipur"],
+            "Solukhumbu": ["Dudhkaushika", "Dudhkoshi", "Khumbu Pasang Lhamu", "Likhupike", "Mahakulung", "Nechasalyan", "Solududhkunda", "Sotang"],
+            "Sunsari": ["Barahachhetra", "Barju", "Bhokraha", "Dewanganj", "Dharan", "Duhabi", "Gadhi", "Harinagar", "Inaruwa", "Itahari", "Koshi", "Ramdhuni"],
+            "Surkhet": ["Barahatal", "Bheriganga", "Birendranagar", "Chaukune", "Chingad", "Gurbhakot", "Lekbeshi", "Panchapuri", "Simta"],
+            "Syangja": ["Aandhikhola", "Arjun Chaupari", "Bheerkot", "Biruwa", "Chapakot", "Galyang", "Harinas", "Kaligandaki", "Phedikhola", "Putalibazar", "Waling"],
+            "Tanahun": ["Aanbookhaireni", "Bandipur", "Bhanu", "Bhimad", "Byas", "Devghat", "Ghiring", "Myagde", "Rhishing", "Shuklagandaki"],
+            "Taplejung": ["Aathrai Triveni", "Faktanglung", "Maiwakhola", "Merikaing", "Mikwakhola", "Phungling", "Sidingba", "Sirijangha", "Yangwarak"],
+            "Terhathum": ["Aathrai", "Chhathar", "Laligurans", "Menchhayayem", "Myanglung", "Phedap"],
+            "Udayapur": ["Belaka", "Chaudandigadhi", "Katari", "Limchungbung", "Rautamai", "Tapli", "Triyuga", "Udayapurgadhi"],
+            "Western Rukum": ["Aathbiskot", "Banfikot", "Chaurjahari", "Musikot", "Sani Bheri", "Tribeni"]
+        };
+
+        // --- Utility Functions ---
+        function getLocalYYYYMMDD() {
+            const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().split('T')[0];
+        }
+
+        function getDaysBetween(startStr, endStr) {
+            if (!startStr || !endStr) return 0;
+            const [sy, sm, sd] = startStr.split('-').map(Number);
+            const [ey, em, ed] = endStr.split('-').map(Number);
+            return Math.max(0, Math.floor((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / (1000 * 60 * 60 * 24)));
+        }
+
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let { width, height } = img;
+                        if (width > height) { if (width > 800) { height *= 800 / width; width = 800; } } 
+                        else { if (height > 800) { width *= 800 / height; height = 800; } }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const c = document.getElementById('toast-container');
+            const b = document.getElementById('toast-body');
+            const i = document.getElementById('toast-icon');
+            document.getElementById('toast-msg').textContent = message;
+            
+            if (type === 'success') { b.className = "px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium justify-center bg-white text-[#1d73a5]"; i.className = "ph-fill ph-check-circle text-lg"; }
+            else if (type === 'error') { b.className = "px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium justify-center bg-red-500 text-white"; i.className = "ph-fill ph-warning-circle text-lg"; }
+            else { b.className = "px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium justify-center bg-white/20 text-white backdrop-blur-md border border-white/30"; i.className = "ph ph-info text-lg"; }
+
+            c.classList.remove('hidden'); c.classList.add('toast-enter');
+            setTimeout(() => { c.classList.add('hidden'); c.classList.remove('toast-enter'); }, 3000);
+        }
+
+        // --- Navigation System ---
+        function navigateTo(viewName, params = {}) {
+            state.currentView = viewName;
+            state.viewParams = params;
+
+            document.querySelectorAll('main > div').forEach(el => el.classList.add('hidden'));
+            const viewEl = document.getElementById(`view-${viewName}`);
+            if (viewEl) viewEl.classList.remove('hidden');
+
+            const btnBack = document.getElementById('btn-back');
+            const headerLogo = document.getElementById('header-logo');
+            const headerSubtitle = document.getElementById('header-subtitle');
+
+            if (['dashboard', 'loading', 'login'].includes(viewName)) {
+                btnBack.classList.add('hidden'); headerLogo.classList.remove('hidden'); headerSubtitle.classList.add('hidden');
+            } else {
+                btnBack.classList.remove('hidden'); headerLogo.classList.add('hidden'); headerSubtitle.classList.remove('hidden');
+                const titles = { 'farms': 'Farm Directory', 'add-farm': 'Register Farm', 'farm-details': 'Farm Details', 'add-batch': 'New Batch', 'close-batch': 'Record Batch Sale', 'add-visit': 'Farm Visit Record', 'settings': 'Settings' };
+                headerSubtitle.textContent = titles[viewName] || '';
+            }
+
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                if (btn.getAttribute('data-nav') === viewName || (viewName.includes('farm') && btn.getAttribute('data-nav') === 'farms')) {
+                    btn.classList.add('text-white', 'font-bold'); btn.classList.remove('text-white/60');
+                } else {
+                    btn.classList.remove('text-white', 'font-bold'); btn.classList.add('text-white/60');
+                }
+            });
+
+            renderView(viewName);
+        }
+
+        document.getElementById('btn-back').addEventListener('click', () => {
+            if (state.currentView === 'farm-details') navigateTo('farms');
+            else if (['add-batch', 'add-visit', 'close-batch'].includes(state.currentView)) navigateTo('farm-details', { farm: state.viewParams.farm });
+            else navigateTo('dashboard');
+        });
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', (e) => navigateTo(e.currentTarget.getAttribute('data-nav')));
+        });
+
+        // --- View Renderers ---
+        function renderView(viewName) {
+            if (viewName === 'dashboard') renderDashboard();
+            if (viewName === 'farms') renderFarmsList();
+            if (viewName === 'farm-details') renderFarmDetails();
+            if (viewName === 'add-farm') renderAddFarmInit();
+            if (viewName === 'add-batch' && state.viewParams.farm) {
+                document.getElementById('ab-name').value = `Batch ${new Date().getFullYear()}-${Math.floor(Math.random()*1000)}`;
+                document.getElementById('ab-date').value = getLocalYYYYMMDD();
+            }
+            if (viewName === 'close-batch') document.getElementById('cb-date').value = getLocalYYYYMMDD();
+            if (viewName === 'add-visit') renderAddVisitInit();
+        }
+
+        function renderDashboard() {
+            const activeBatches = state.batches.filter(b => b.active);
+            const totalBirds = activeBatches.reduce((acc, b) => acc + Number(b.chicksPlaced), 0);
+
+            document.getElementById('dash-stats-container').innerHTML = `
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="glass-panel p-4 rounded-xl flex flex-col justify-center items-center">
+                        <div class="bg-white/20 p-2.5 rounded-full mb-2"><i class="ph ph-house text-xl text-white"></i></div>
+                        <span class="text-2xl font-bold text-white">${state.farms.length}</span>
+                        <span class="text-xs text-white/80 mt-0.5">Total Farms</span>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl flex flex-col justify-center items-center">
+                        <div class="bg-white/20 p-2.5 rounded-full mb-2"><i class="ph ph-activity text-xl text-white"></i></div>
+                        <span class="text-2xl font-bold text-white">${activeBatches.length}</span>
+                        <span class="text-xs text-white/80 mt-0.5">Active Batches</span>
+                    </div>
+                </div>
+                <div class="glass-panel rounded-xl p-6 text-white relative overflow-hidden">
+                    <div class="relative z-10">
+                        <h3 class="text-sm font-medium text-white/90 mb-1">Current Placement</h3>
+                        <p class="text-4xl font-bold mb-4 tracking-tight">${totalBirds.toLocaleString()} <span class="text-lg font-normal text-white/80">Birds</span></p>
+                        <div class="border-t border-white/20 pt-4">
+                            <p class="text-white/70 text-xs uppercase tracking-wide">Total Logged Visits</p>
+                            <p class="font-bold text-lg">${state.visits.length}</p>
+                        </div>
+                    </div>
+                    <i class="ph ph-bird text-[120px] absolute -right-4 -bottom-6 text-white/10"></i>
+                </div>
+            `;
+
+            const today = getLocalYYYYMMDD();
+            const recs = activeBatches.map(batch => {
+                const farm = state.farms.find(f => f.id === batch.farmId);
+                const bVisits = state.visits.filter(v => v.batchId === batch.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+                const lastDate = bVisits.length > 0 ? bVisits[0].date : batch.arrivalDate;
+                return { farm, batch, days: getDaysBetween(lastDate, today) };
+            }).filter(r => r.farm).sort((a,b) => b.days - a.days).slice(0,4);
+
+            if (recs.length > 0) {
+                document.getElementById('dash-recommendations').innerHTML = `
+                    <h3 class="text-white font-semibold mt-6 mb-3 flex items-center gap-2"><i class="ph-fill ph-calendar-check text-accent"></i> Recommended Visits</h3>
+                    <div class="space-y-3">
+                        ${recs.map((r, i) => `
+                            <div class="dash-rec-btn glass-panel p-4 rounded-xl flex items-center justify-between cursor-pointer active:scale-[0.98]" data-index="${i}">
+                                <div>
+                                    <h4 class="font-bold text-white text-[15px]">${r.farm.name}</h4>
+                                    <p class="text-xs text-white/70 mt-0.5">${r.batch.name}</p>
+                                </div>
+                                <div class="text-right flex flex-col items-end">
+                                    <span class="text-xl font-black leading-none ${r.days >= 7 ? 'text-red-400' : (r.days>=4 ? 'text-yellow-400' : 'text-emerald-400')}">${r.days}</span>
+                                    <span class="text-[9px] uppercase tracking-wider text-white/60 font-bold mt-1">Days Ago</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                document.querySelectorAll('.dash-rec-btn').forEach(btn => btn.addEventListener('click', (e) => navigateTo('farm-details', { farm: recs[e.currentTarget.getAttribute('data-index')].farm })));
+            } else { document.getElementById('dash-recommendations').innerHTML = ''; }
+
+            document.getElementById('dash-quick-actions').innerHTML = `
+                <h3 class="text-white font-semibold mt-6 mb-3 flex items-center gap-2">Quick Actions</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="document.querySelector('[data-action=nav-add-farm]').click()" class="glass-panel p-3.5 rounded-xl flex items-center gap-3 active:scale-95 transition-all">
+                        <div class="bg-white/20 text-white p-2 rounded-lg"><i class="ph ph-plus"></i></div>
+                        <span class="text-sm font-medium text-white">Add Farm</span>
+                    </button>
+                    <button onclick="document.querySelector('[data-nav=farms]').click()" class="glass-panel p-3.5 rounded-xl flex items-center gap-3 active:scale-95 transition-all">
+                        <div class="bg-white/20 text-white p-2 rounded-lg"><i class="ph ph-map-pin"></i></div>
+                        <span class="text-sm font-medium text-white">View Farms</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action]');
+            if (btn && btn.getAttribute('data-action') === 'nav-add-farm') navigateTo('add-farm');
+        });
+
+        function renderFarmsList() {
+            const query = (document.getElementById('farm-search').value || '').toLowerCase();
+            const filtered = state.farms.filter(f => f.name.toLowerCase().includes(query) || f.district.toLowerCase().includes(query) || f.municipality.toLowerCase().includes(query)).sort((a,b) => a.name.localeCompare(b.name));
+            const container = document.getElementById('farms-list-container');
+
+            if (state.farms.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 glass-panel rounded-xl"><i class="ph ph-map-pin text-4xl text-white/50 mb-3 block"></i><p class="text-white/80 text-sm">No farms registered yet.</p></div>`; return;
+            }
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 glass-panel rounded-xl"><i class="ph ph-magnifying-glass text-4xl text-white/50 mb-3 block"></i><p class="text-white/80 text-sm">No farms match your search.</p></div>`; return;
+            }
+
+            container.innerHTML = filtered.map(farm => `
+                <div class="farm-card glass-panel p-4 rounded-xl flex items-center justify-between cursor-pointer active:bg-white/20 transition-colors" data-id="${farm.id}">
+                    <div>
+                        <h3 class="font-bold text-white text-[15px]">${farm.name}</h3>
+                        <p class="text-xs text-white/70 mt-1">${farm.district}, ${farm.municipality}</p>
+                        <span class="inline-block mt-2 text-[10px] uppercase font-bold tracking-wider text-primary bg-white px-2 py-0.5 rounded-md">${farm.type}</span>
+                    </div>
+                    <i class="ph ph-caret-right text-white/50 text-xl"></i>
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.farm-card').forEach(card => card.addEventListener('click', (e) => navigateTo('farm-details', { farm: state.farms.find(f => f.id === e.currentTarget.getAttribute('data-id')) })));
+        }
+        document.getElementById('farm-search').addEventListener('input', renderFarmsList);
+
+        function renderAddFarmInit() {
+            const distSelect = document.getElementById('af-district');
+            const wardSelect = document.getElementById('af-ward');
+            
+            if(distSelect.options.length <= 1) {
+                Object.keys(nepalLocations).sort().forEach(d => distSelect.add(new Option(d, d, false, false)));
+                for(let i=1; i<=35; i++) wardSelect.add(new Option(i, i, false, false));
+                
+                distSelect.addEventListener('change', (e) => {
+                    const munSelect = document.getElementById('af-mun');
+                    munSelect.innerHTML = '<option value="" disabled selected class="text-slate-800 bg-white">Municipality</option>';
+                    if(e.target.value) {
+                        nepalLocations[e.target.value].sort().forEach(m => munSelect.add(new Option(m, m, false, false)));
+                        munSelect.add(new Option("+ Type Manually...", "CUSTOM", false, false));
+                        munSelect.disabled = false;
+                        munSelect.classList.replace('bg-white/10', 'bg-[#2a8cbd]');
+                        munSelect.classList.replace('text-white/50', 'text-white');
+                    }
+                });
+
+                document.getElementById('af-mun').addEventListener('change', (e) => {
+                    if(e.target.value === 'CUSTOM') {
+                        e.target.classList.add('hidden');
+                        document.getElementById('af-custom-mun').classList.remove('hidden');
+                        document.getElementById('af-custom-mun').required = true;
+                        e.target.required = false;
+                    }
+                });
+            }
+        }
+
+        function renderFarmDetails() {
+            const farm = state.viewParams.farm;
+            if(!farm) return navigateTo('farms');
+
+            const farmBatches = state.batches.filter(b => b.farmId === farm.id).sort((a,b) => new Date(b.arrivalDate) - new Date(a.arrivalDate));
+            document.getElementById('farm-header-container').innerHTML = `
+                <div class="glass-panel p-6 rounded-xl relative overflow-hidden">
+                    <div class="flex justify-between items-start mb-3">
+                        <h2 class="text-2xl font-bold text-white tracking-tight">${farm.name}</h2>
+                        <span class="bg-white text-primary text-[10px] px-2.5 py-1 rounded-md font-bold tracking-wider shadow-sm">${farm.type}</span>
+                    </div>
+                    <div class="text-sm text-white/80 space-y-1.5 font-medium">
+                        <p class="flex items-center gap-2"><i class="ph ph-user"></i> ${farm.owner} • ${farm.phone}</p>
+                        <p class="flex items-center gap-2"><i class="ph ph-map-pin"></i> ${farm.municipality}-${farm.ward}, ${farm.district}</p>
+                    </div>
+                    ${farm.lat && farm.lng ? `<button onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${farm.lat},${farm.lng}', '_blank')" class="mt-5 w-full bg-white/20 hover:bg-white/30 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-white/40 shadow-sm uppercase tracking-wider"><i class="ph ph-navigation-arrow"></i> Launch GPS Navigation</button>` : `<div class="mt-4 p-2.5 bg-white/5 border border-white/10 rounded-xl text-center text-xs text-white/60">No GPS coordinates saved for navigation.</div>`}
+                </div>
+            `;
+
+            document.getElementById('btn-add-batch-nav').onclick = () => navigateTo('add-batch', { farm });
+            const listContainer = document.getElementById('farm-batches-list');
+
+            if (farmBatches.length === 0) {
+                listContainer.innerHTML = `<div class="glass-panel p-8 rounded-xl text-center"><p class="text-white/80 text-sm mb-4 font-medium">No batches added yet.</p><button onclick="document.getElementById('btn-add-batch-nav').click()" class="bg-white text-primary px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-sky-50">Create First Batch</button></div>`; return;
+            }
+
+            listContainer.innerHTML = farmBatches.map(batch => {
+                const v = state.visits.filter(vi => vi.batchId === batch.id);
+                const age = getDaysBetween(batch.arrivalDate, getLocalYYYYMMDD());
+                let btns = '';
+                if(batch.active) {
+                    btns = `<div class="mt-4 grid grid-cols-2 gap-3"><button class="btn-log-visit w-full bg-white/20 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-white/40 uppercase tracking-wide" data-id="${batch.id}"><i class="ph ph-activity text-lg"></i> Log Visit</button><button class="btn-close-batch w-full bg-[#15567b] py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide border border-black/10" data-id="${batch.id}"><i class="ph ph-package text-lg"></i> Sell Batch</button></div>`;
+                }
+                return `
+                    <div class="glass-panel rounded-xl overflow-hidden relative">
+                        ${batch.active ? '<div class="absolute top-0 left-0 w-1.5 h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"></div>' : ''}
+                        <div class="p-5 pl-6">
+                            <h4 class="font-bold text-white flex items-center gap-2 text-lg">${batch.name} ${batch.active ? '<span class="bg-white/20 text-white text-[10px] px-2 py-0.5 rounded-md font-bold border border-white/40">ACTIVE</span>' : '<span class="bg-black/20 text-white/60 text-[10px] px-2 py-0.5 rounded-md font-bold border border-white/10">CLOSED</span>'}</h4>
+                            <p class="text-xs text-white/70 mt-1.5 font-medium">Arrived: ${batch.arrivalDate} • ${batch.chicksPlaced} chicks</p>
+                            <div class="mt-4 flex gap-3">
+                                <div class="flex-1 bg-black/10 border border-white/10 p-3 rounded-xl text-center shadow-inner"><span class="block text-[10px] text-white/70 uppercase font-bold tracking-wider mb-1">${batch.active ? 'Current Age' : 'Sold Date'}</span><span class="font-bold text-white text-base">${batch.active ? age + ' days' : batch.soldDate}</span></div>
+                                <div class="flex-1 bg-black/10 border border-white/10 p-3 rounded-xl text-center shadow-inner"><span class="block text-[10px] text-white/70 uppercase font-bold tracking-wider mb-1">Visits</span><span class="font-bold text-white text-base">${v.length}</span></div>
+                            </div>
+                            ${btns}
+                        </div>
+                    </div>`;
+            }).join('');
+
+            document.querySelectorAll('.btn-log-visit').forEach(b => b.addEventListener('click', (e) => navigateTo('add-visit', { farm, batch: state.batches.find(bx => bx.id === e.currentTarget.getAttribute('data-id')) })));
+            document.querySelectorAll('.btn-close-batch').forEach(b => b.addEventListener('click', (e) => navigateTo('close-batch', { farm, batch: state.batches.find(bx => bx.id === e.currentTarget.getAttribute('data-id')) })));
+        }
+
+        // --- Add Visit Calculations & Logic ---
+        function renderAddVisitInit() {
+            const { farm, batch } = state.viewParams;
+            if(!farm || !batch) return navigateTo('dashboard');
+
+            document.getElementById('visit-header-info').innerHTML = `<h2 class="font-bold text-xl tracking-tight">${farm.name}</h2><p class="text-white/80 text-sm font-medium mt-1">${batch.name} • Day <span id="v-disp-age" class="font-bold"></span></p>`;
+
+            // Tab logic
+            document.querySelectorAll('.visit-tab-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const target = e.currentTarget.getAttribute('data-tab');
+                    document.querySelectorAll('.visit-tab').forEach(t => t.classList.add('hidden'));
+                    document.querySelectorAll('.visit-tab-btn').forEach(b => { b.classList.remove('bg-white', 'text-primary', 'shadow-sm'); b.classList.add('text-white/70'); });
+                    document.getElementById(target).classList.remove('hidden');
+                    e.currentTarget.classList.add('bg-white', 'text-primary', 'shadow-sm');
+                    e.currentTarget.classList.remove('text-white/70');
+                }
+            });
+
+            // Conditional Layer Fields
+            if(farm.type === 'Layer') {
+                document.getElementById('layer-perf-section').classList.remove('hidden');
+                document.getElementById('layer-health-section').classList.remove('hidden');
+            } else {
+                document.getElementById('layer-perf-section').classList.add('hidden');
+                document.getElementById('layer-health-section').classList.add('hidden');
+            }
+
+            // Lesion Checkboxes
+            const lesionContainer = document.getElementById('lesion-checkboxes');
+            lesionContainer.innerHTML = ['Liver', 'Intestine', 'Heart', 'Lungs', 'Bursa'].map(organ => `
+                <label class="flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer select-none transition-all shadow-sm bg-black/10 border-white/10 text-white/80 font-medium hover:bg-black/20" data-organ="${organ}">
+                    <input type="checkbox" class="lesion-cb rounded text-[#1d73a5] focus:ring-white bg-white/50 border-transparent" value="${organ}" />
+                    <span class="text-sm tracking-wide">${organ}</span>
+                </label>
+            `).join('');
+            
+            document.querySelectorAll('.lesion-cb').forEach(cb => cb.addEventListener('change', (e) => {
+                const label = e.target.closest('label');
+                if(e.target.checked) { label.classList.replace('bg-black/10', 'bg-white/30'); label.classList.replace('border-white/10', 'border-white'); label.classList.add('text-white', 'font-bold'); } 
+                else { label.classList.replace('bg-white/30', 'bg-black/10'); label.classList.replace('border-white', 'border-white/10'); label.classList.remove('text-white', 'font-bold'); }
+            }));
+
+            // Clear Images
+            state.necropsyImages = [];
+            renderImages();
+
+            // Setup Form Initial Values & Calculation Listeners
+            document.getElementById('av-date').value = getLocalYYYYMMDD();
+            document.getElementById('av-mort').value = '';
+            document.getElementById('av-weight').value = '';
+            document.getElementById('av-feed-qty').value = '';
+            calculateVisitStats();
+
+            document.getElementById('av-date').addEventListener('change', calculateVisitStats);
+            document.getElementById('av-mort').addEventListener('input', calculateVisitStats);
+            document.getElementById('av-weight').addEventListener('input', calculateVisitStats);
+            document.getElementById('av-feed-qty').addEventListener('input', calculateVisitStats);
+        }
+
+        function calculateVisitStats() {
+            const { batch } = state.viewParams;
+            if(!batch) return;
+            
+            const dateStr = document.getElementById('av-date').value;
+            const age = getDaysBetween(batch.arrivalDate, dateStr);
+            document.getElementById('av-age').value = age;
+            if(document.getElementById('v-disp-age')) document.getElementById('v-disp-age').textContent = age;
+
+            const bVisits = state.visits.filter(v => v.batchId === batch.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+            const lastDate = bVisits.length > 0 ? bVisits[0].date : batch.arrivalDate;
+            const daysSinceLast = Math.max(1, getDaysBetween(lastDate, dateStr));
+            const prevMort = bVisits.reduce((acc, v) => acc + (Number(v.periodMortality) || Number(v.mortality) || 0), 0);
+            const prevFeed = bVisits.reduce((acc, v) => acc + (Number(v.feedQty) || 0), 0);
+            
+            const avgMort = Number(document.getElementById('av-mort').value) || 0;
+            const periodMort = avgMort * daysSinceLast;
+            
+            const mCalcBox = document.getElementById('av-mort-calc');
+            if(avgMort > 0) { mCalcBox.innerHTML = `${daysSinceLast} days × ${avgMort} = <strong class="text-white">${periodMort} total</strong>`; mCalcBox.classList.remove('hidden'); }
+            else { mCalcBox.classList.add('hidden'); }
+
+            const initialBirds = Number(batch.chicksPlaced);
+            const currentAlive = Math.max(0, initialBirds - prevMort - periodMort);
+            document.getElementById('av-live-birds').textContent = currentAlive;
+
+            const fQty = Number(document.getElementById('av-feed-qty').value) || 0;
+            const cumFeed = prevFeed + fQty;
+            const fCalcBox = document.getElementById('av-feed-calc');
+            if(fQty > 0) { fCalcBox.innerHTML = `Cum. Feed: <strong class="text-white">${cumFeed.toFixed(1)} kg</strong>`; fCalcBox.classList.remove('hidden'); }
+            else { fCalcBox.classList.add('hidden'); }
+
+            const mortPercent = initialBirds > 0 ? (((prevMort + periodMort) / initialBirds) * 100).toFixed(2) : 0;
+            document.getElementById('av-stat-mort').textContent = mortPercent;
+
+            const weightKg = (Number(document.getElementById('av-weight').value) || 0) / 1000;
+            const totalWtKg = weightKg * currentAlive;
+            const fcr = (cumFeed > 0 && totalWtKg > 0) ? (cumFeed / totalWtKg).toFixed(2) : '--';
+            document.getElementById('av-stat-fcr').textContent = fcr;
+
+            // Store calculations in state for submission
+            state.viewParams.calculated = { age, daysSinceLast, periodMort, currentAlive, cumFeed, mortPercent, fcr };
+        }
+
+        // Image Handling
+        document.getElementById('btn-trigger-upload').addEventListener('click', () => document.getElementById('av-image-input').click());
+        document.getElementById('av-image-input').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if(!files.length) return;
+            showToast("Compressing images...", "info");
+            for(let f of files) {
+                try {
+                    const compressed = await compressImage(f);
+                    state.necropsyImages.push(compressed);
+                } catch(e){}
+            }
+            renderImages();
+        });
+
+        function renderImages() {
+            const container = document.getElementById('av-image-preview-container');
+            const btnHTML = `<button type="button" id="btn-trigger-upload-inner" class="aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed border-white/40 rounded-xl text-white/70 hover:bg-white/10 hover:border-white hover:text-white transition-colors bg-black/5"><i class="ph ph-camera text-2xl"></i><span class="text-[10px] font-bold uppercase tracking-widest">Add Photo</span></button>`;
+            
+            const imagesHTML = state.necropsyImages.map((img, idx) => `
+                <div class="relative aspect-square rounded-xl overflow-hidden border border-white/30 shadow-sm">
+                    <img src="${img}" class="w-full h-full object-cover" />
+                    <button type="button" data-idx="${idx}" class="btn-remove-img absolute top-1.5 right-1.5 bg-black/50 backdrop-blur-sm p-1.5 rounded-lg text-white shadow hover:bg-red-500 transition-colors border border-white/20"><i class="ph ph-trash"></i></button>
+                </div>
+            `).join('');
+            
+            container.innerHTML = imagesHTML + btnHTML;
+            document.getElementById('btn-trigger-upload-inner').addEventListener('click', () => document.getElementById('av-image-input').click());
+            document.querySelectorAll('.btn-remove-img').forEach(btn => btn.addEventListener('click', (e) => {
+                state.necropsyImages.splice(Number(e.currentTarget.getAttribute('data-idx')), 1);
+                renderImages();
+            }));
+        }
+
+
+        // --- Close Batch Calculations ---
+        document.getElementById('cb-sold').addEventListener('input', updateCloseBatchMass);
+        document.getElementById('cb-weight').addEventListener('input', updateCloseBatchMass);
+        function updateCloseBatchMass() {
+            const s = Number(document.getElementById('cb-sold').value);
+            const w = Number(document.getElementById('cb-weight').value);
+            const box = document.getElementById('cb-harvest-mass');
+            if(s && w) {
+                document.getElementById('cb-mass-val').textContent = ((s*w)/1000).toLocaleString();
+                box.classList.remove('hidden');
+            } else { box.classList.add('hidden'); }
+        }
+
+        // --- Firebase Form Submissions ---
+
+        // 1. Add Farm
+        let farmLoc = { lat: null, lng: null };
+        document.getElementById('btn-capture-loc').addEventListener('click', () => {
+            const btn = document.getElementById('btn-capture-loc');
+            btn.innerHTML = 'Capturing...'; btn.disabled = true;
+            if("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    farmLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    btn.innerHTML = '<i class="ph ph-check-circle"></i> Location Captured ✓';
+                    btn.classList.add('bg-white/20', 'border-white/50', 'text-white');
+                    const st = document.getElementById('loc-status');
+                    st.textContent = `${farmLoc.lat.toFixed(5)}, ${farmLoc.lng.toFixed(5)}`;
+                    st.classList.remove('hidden');
+                    btn.disabled = false;
+                }, err => { showToast("GPS failed", "error"); btn.innerHTML = '<i class="ph ph-map-pin"></i> Capture GPS'; btn.disabled = false; }, {enableHighAccuracy: true, timeout: 10000});
+            }
+        });
+
+        document.getElementById('form-add-farm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-save-farm');
+            btn.textContent = "Saving..."; btn.disabled = true;
+
+            const isCustomMun = document.getElementById('af-mun').classList.contains('hidden');
+            const munValue = isCustomMun ? document.getElementById('af-custom-mun').value : document.getElementById('af-mun').value;
+
+            const payload = {
+                name: document.getElementById('af-name').value,
+                owner: document.getElementById('af-owner').value,
+                phone: document.getElementById('af-phone').value,
+                type: document.getElementById('af-type').value,
+                district: document.getElementById('af-district').value,
+                municipality: munValue,
+                ward: document.getElementById('af-ward').value,
+                lat: farmLoc.lat, lng: farmLoc.lng,
+                createdAt: serverTimestamp()
+            };
+
+            try {
+                const docRef = await addDoc(collection(db, 'artifacts', appId, 'users', state.user.uid, 'farms'), payload);
+                showToast("Farm registered successfully", "success");
+                e.target.reset(); farmLoc = {lat:null, lng:null};
+                document.getElementById('btn-capture-loc').innerHTML = '<i class="ph ph-map-pin"></i> Capture GPS Location';
+                navigateTo('farm-details', { farm: { id: docRef.id, ...payload } });
+            } catch (err) { showToast("Error saving farm", "error"); } 
+            finally { btn.textContent = "Save Farm"; btn.disabled = false; }
+        });
+
+        // 2. Add Batch
+        document.getElementById('form-add-batch').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-save-batch');
+            btn.textContent = "Saving..."; btn.disabled = true;
+
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'users', state.user.uid, 'batches'), {
+                    farmId: state.viewParams.farm.id,
+                    name: document.getElementById('ab-name').value,
+                    arrivalDate: document.getElementById('ab-date').value,
+                    chicksPlaced: Number(document.getElementById('ab-chicks').value),
+                    breed: document.getElementById('ab-breed').value,
+                    active: true, createdAt: serverTimestamp()
+                });
+                showToast("Batch created successfully", "success");
+                e.target.reset();
+                navigateTo('farm-details', { farm: state.viewParams.farm });
+            } catch (err) { showToast("Error saving batch", "error"); } 
+            finally { btn.textContent = "Start Batch"; btn.disabled = false; }
+        });
+
+        // 3. Close Batch
+        document.getElementById('form-close-batch').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-save-close');
+            btn.textContent = "Processing..."; btn.disabled = true;
+
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'users', state.user.uid, 'batches', state.viewParams.batch.id), {
+                    active: false,
+                    soldDate: document.getElementById('cb-date').value,
+                    birdsSold: Number(document.getElementById('cb-sold').value),
+                    finalWeight: Number(document.getElementById('cb-weight').value),
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+                showToast("Batch Sold & Archived", "success");
+                e.target.reset(); document.getElementById('cb-harvest-mass').classList.add('hidden');
+                navigateTo('farm-details', { farm: state.viewParams.farm });
+            } catch (err) { showToast("Error closing batch", "error"); } 
+            finally { btn.textContent = "Confirm Sale & Close Batch"; btn.disabled = false; }
+        });
+
+        // 4. Add Visit
+        document.getElementById('form-add-visit').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-save-visit');
+            btn.innerHTML = '<div class="loader inline-block"></div> Uploading...'; btn.disabled = true;
+
+            try {
+                let uploadedUrls = [];
+                if(state.necropsyImages.length > 0) {
+                    showToast("Uploading media to cloud...", "info");
+                    for(let i=0; i<state.necropsyImages.length; i++) {
+                        const imgRef = ref(storage, `artifacts/${appId}/users/${state.user.uid}/necropsy/${Date.now()}_${i}.jpg`);
+                        await uploadString(imgRef, state.necropsyImages[i], 'data_url');
+                        uploadedUrls.push(await getDownloadURL(imgRef));
+                    }
+                }
+
+                const calc = state.viewParams.calculated;
+                const activeLesions = {};
+                document.querySelectorAll('.lesion-cb:checked').forEach(cb => activeLesions[cb.value] = true);
+
+                let layerData = null;
+                if(state.viewParams.farm.type === 'Layer') {
+                    layerData = {
+                        dailyEggProduction: Number(document.getElementById('av-layer-eggs').value) || 0,
+                        eggSize: document.getElementById('av-layer-size').value,
+                        isPeakPeriod: document.getElementById('av-layer-peak').checked,
+                        eggQuality: document.getElementById('av-layer-quality').value,
+                        layerIssues: {
+                            prolapse: document.getElementById('av-layer-prolapse').checked,
+                            cannibalism: document.getElementById('av-layer-cannibalism').checked
+                        }
+                    };
+                }
+
+                const payload = {
+                    farmId: state.viewParams.farm.id,
+                    batchId: state.viewParams.batch.id,
+                    date: document.getElementById('av-date').value,
+                    age: calc.age,
+                    daysSinceLastVisit: calc.daysSinceLast,
+                    birdsAlive: calc.currentAlive,
+                    mortality: Number(document.getElementById('av-mort').value) || 0,
+                    periodMortality: calc.periodMort,
+                    mortalityPercent: Number(calc.mortPercent),
+                    weight: Number(document.getElementById('av-weight').value) || 0,
+                    feedType: document.getElementById('av-feed-type').value,
+                    feedQty: Number(document.getElementById('av-feed-qty').value) || 0,
+                    cumulativeFeed: calc.cumFeed,
+                    fcr: calc.fcr !== '--' ? Number(calc.fcr) : null,
+                    
+                    symptoms: document.getElementById('av-symp').value,
+                    diagnosis: document.getElementById('av-diag').value,
+                    treatment: document.getElementById('av-treat').value,
+                    temperature: document.getElementById('av-temp').value ? Number(document.getElementById('av-temp').value) : null,
+                    humidity: document.getElementById('av-hum').value ? Number(document.getElementById('av-hum').value) : null,
+                    remarks: document.getElementById('av-rem').value,
+                    
+                    necropsy: {
+                        examined: Number(document.getElementById('av-nec-exam').value) || 0,
+                        lesions: activeLesions,
+                        description: document.getElementById('av-nec-desc').value,
+                        images: uploadedUrls
+                    },
+                    layerData,
+                    createdAt: serverTimestamp(),
+                    syncStatus: 'Synced'
+                };
+
+                await addDoc(collection(db, 'artifacts', appId, 'users', state.user.uid, 'visits'), payload);
+                showToast("Visit recorded & synced", "success");
+                e.target.reset(); state.necropsyImages = [];
+                navigateTo('farm-details', { farm: state.viewParams.farm });
+            } catch (err) { console.error(err); showToast("Error saving data", "error"); } 
+            finally { btn.innerHTML = '<i class="ph-fill ph-check-circle text-xl"></i> Save Visit Record'; btn.disabled = false; }
+        });
+
+        // --- Settings (Logo Upload) ---
+        document.getElementById('btn-trigger-logo').addEventListener('click', () => document.getElementById('settings-logo-input').click());
+        document.getElementById('settings-logo-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const btn = document.getElementById('btn-trigger-logo');
+            btn.textContent = "Uploading..."; btn.disabled = true;
+            try {
+                const b64 = await compressImage(file);
+                await setDoc(doc(db, 'artifacts', appId, 'users', state.user.uid, 'settings', 'profile'), { logo: b64, updatedAt: serverTimestamp() }, { merge: true });
+                showToast("Logo updated", "success");
+            } catch(e) { showToast("Error updating logo", "error"); }
+            finally { btn.textContent = "Upload Custom Logo"; btn.disabled = false; }
+        });
+
+        // --- Excel Export (SheetJS) ---
+        document.getElementById('btn-export').addEventListener('click', () => {
+            if (!window.XLSX || state.farms.length === 0) return showToast("Data not ready", "error");
+            
+            try {
+                const wb = XLSX.utils.book_new();
+                const getFName = (id) => state.farms.find(f => f.id === id)?.name || 'Unknown';
+                const getBName = (id) => state.batches.find(b => b.id === id)?.name || 'Unknown';
+
+                const sortedVisits = [...state.visits].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+                const farmsS = XLSX.utils.json_to_sheet(state.farms.map(f => ({'ID': f.id, 'Name': f.name, 'Owner': f.owner, 'Phone': f.phone, 'Location': `${f.district}, ${f.municipality}-${f.ward}`, 'Type': f.type})));
+                XLSX.utils.book_append_sheet(wb, farmsS, "Farms Directory");
+
+                const batchesS = XLSX.utils.json_to_sheet(state.batches.map(b => ({'Farm': getFName(b.farmId), 'Batch': b.name, 'Arrived': b.arrivalDate, 'Placed': b.chicksPlaced, 'Breed': b.breed, 'Status': b.active ? 'Active' : 'Closed', 'Sold': b.soldDate||'', 'BirdsSold': b.birdsSold||'', 'AvgWt(g)': b.finalWeight||''})));
+                XLSX.utils.book_append_sheet(wb, batchesS, "Batches Log");
+
+                const visitsS = XLSX.utils.json_to_sheet(sortedVisits.map(v => ({
+                    'Farm': getFName(v.farmId), 'Batch': getBName(v.batchId), 'Date': v.date, 'Age(Days)': v.age, 'BirdsAlive': v.birdsAlive,
+                    'Mortality': v.periodMortality || v.mortality, 'Wt(g)': v.weight, 'FeedType': v.feedType, 'PeriodFeed(kg)': v.feedQty,
+                    'CumFeed(kg)': v.cumulativeFeed, 'EstFCR': v.fcr, 'CumMort%': v.mortalityPercent,
+                    'LayerDailyEggs': v.layerData?.dailyEggProduction||'', 'LayerPeak': v.layerData?.isPeakPeriod?'Yes':'No'
+                })));
+                XLSX.utils.book_append_sheet(wb, visitsS, "Performance");
+
+                const healthS = XLSX.utils.json_to_sheet(sortedVisits.map(v => ({
+                    'Farm': getFName(v.farmId), 'Batch': getBName(v.batchId), 'Date': v.date, 'Symptoms': v.symptoms, 'Diagnosis': v.diagnosis, 'Treatment': v.treatment,
+                    'NecropsyExamined': v.necropsy?.examined, 'Lesions': Object.keys(v.necropsy?.lesions||{}).join(', ')
+                })));
+                XLSX.utils.book_append_sheet(wb, healthS, "Health & Diagnostics");
+
+                XLSX.writeFile(wb, `SWIFT_Data_${getLocalYYYYMMDD()}.xlsx`);
+                showToast("Data Exported", "success");
+            } catch (e) { showToast("Export failed", "error"); }
+        });
+
+
+        // --- Authentication & Initialization ---
+        window.addEventListener('online', () => { document.getElementById('network-status').innerHTML = '<i class="ph ph-wifi-high text-white/90"></i>'; document.getElementById('network-status').className="bg-white/10 p-2 rounded-xl border border-white/10 shadow-sm";});
+        window.addEventListener('offline', () => { document.getElementById('network-status').innerHTML = '<i class="ph ph-wifi-slash text-red-400"></i>'; document.getElementById('network-status').className="bg-red-500/20 p-2 rounded-xl border border-red-500/30 shadow-sm"; });
+
+        const initApp = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
+            } catch (err) {
+                document.getElementById('view-loading').classList.add('hidden');
+                document.getElementById('view-login').classList.remove('hidden');
+                showToast("Auth failed", "error");
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) { state.user = user; setupListeners(user.uid); } 
+            else { state.user = null; state.unsubs.forEach(u => u()); state.unsubs = []; }
+        });
+
+        function setupListeners(uid) {
+            state.unsubs.forEach(u => u()); state.unsubs = [];
+
+            let L = { f: false, b: false, v: false, s: false };
+            const check = () => {
+                if(L.f && L.b && L.v && L.s) {
+                    if(['loading', 'login'].includes(state.currentView)) navigateTo('dashboard');
+                    else renderView(state.currentView);
+                }
+            };
+
+            const uF = onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'farms'), snap => { state.farms = snap.docs.map(d => ({id:d.id, ...d.data()})); L.f=true; check(); });
+            const uB = onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'batches'), snap => { state.batches = snap.docs.map(d => ({id:d.id, ...d.data()})); L.b=true; check(); });
+            const uV = onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'visits'), snap => { state.visits = snap.docs.map(d => ({id:d.id, ...d.data()})); L.v=true; check(); });
+            const uS = onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'settings'), snap => { 
+                const doc = snap.docs.find(d => d.id === 'profile');
+                if(doc && doc.data().logo) {
+                    const l = doc.data().logo;
+                    document.getElementById('custom-logo-img').src = l;
+                    document.getElementById('settings-logo-preview').src = l;
+                }
+                L.s=true; check(); 
+            });
+
+            state.unsubs.push(uF, uB, uV, uS);
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
