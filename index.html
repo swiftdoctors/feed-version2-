@@ -523,7 +523,15 @@
 
         // --- Configuration & Initialization ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-poultry-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = {
+    apiKey: "AIzaSyBJIqThYCMscthL6UjKuWlHD2hCLkOn3Sw",
+    authDomain: "poultry-performance-tracker.firebaseapp.com",
+    projectId: "poultry-performance-tracker",
+    storageBucket: "poultry-performance-tracker.firebasestorage.app",
+    messagingSenderId: "198521691456",
+    appId: "1:198521691456:web:afc459cbb709a0d5b8aea5",
+    measurementId: "G-RDHM72SMGH"
+};
         
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
