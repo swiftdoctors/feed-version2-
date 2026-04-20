@@ -550,20 +550,16 @@
         // --- Configuration & Initialization ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-poultry-app';
         
-        let firebaseConfig;
-        if (typeof __firebase_config !== 'undefined') {
-            firebaseConfig = JSON.parse(__firebase_config);
-        } else {
-            firebaseConfig = {
-                apiKey: "AIzaSyBJIqThYCMscthL6UjKuWlHD2hCLkOn3Sw",
-                authDomain: "poultry-performance-tracker.firebaseapp.com",
-                projectId: "poultry-performance-tracker",
-                storageBucket: "poultry-performance-tracker.firebasestorage.app",
-                messagingSenderId: "198521691456",
-                appId: "1:198521691456:web:afc459cbb709a0d5b8aea5",
-                measurementId: "G-RDHM72SMGH"
-            };
-        }
+        // FORCED to use your specific Firebase project so your created users work anywhere
+        const firebaseConfig = {
+            apiKey: "AIzaSyBJIqThYCMscthL6UjKuWlHD2hCLkOn3Sw", // IMPORTANT: If you get an API key error, update this value!
+            authDomain: "poultry-performance-tracker.firebaseapp.com",
+            projectId: "poultry-performance-tracker",
+            storageBucket: "poultry-performance-tracker.firebasestorage.app",
+            messagingSenderId: "198521691456",
+            appId: "1:198521691456:web:afc459cbb709a0d5b8aea5",
+            measurementId: "G-RDHM72SMGH"
+        };
         
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -1384,14 +1380,7 @@
         window.addEventListener('offline', () => { document.getElementById('network-status').innerHTML = '<i class="ph ph-wifi-slash text-red-400"></i>'; document.getElementById('network-status').className="bg-red-500/20 p-2 rounded-xl border border-red-500/30 shadow-sm"; });
 
         const initApp = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                try {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } catch (e) {
-                    console.log("Custom token failed, falling back to login prompt");
-                }
-            }
-            // State handler will switch views
+            // Auto-login disabled to strictly force the Email/Password authentication form
         };
 
         onAuthStateChanged(auth, (user) => {
