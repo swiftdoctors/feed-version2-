@@ -66,6 +66,11 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Stylize datalist dropdown slightly for webkit browsers */
+        input::-webkit-calendar-picker-indicator {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="flex justify-center text-white h-screen overflow-hidden bg-slate-900">
@@ -107,13 +112,23 @@
 
             <!-- Login -->
             <div id="view-login" class="hidden mt-20 p-6 glass-panel rounded-2xl mx-4 text-center">
-                <i class="ph ph-activity text-5xl text-white/90 mb-4 block"></i>
-                <h2 class="text-xl font-bold mb-2 text-accent drop-shadow-sm">Welcome to SWIFT Tracker</h2>
-                <p class="text-white/70 text-sm mb-4" id="login-message">Please log in to manage farms.</p>
-                <div class="bg-black/20 p-3 rounded-lg text-xs text-left text-white/80 mb-6 hidden" id="login-error-details"></div>
-                <button onclick="window.location.reload()" class="w-full bg-white text-primary p-3 rounded-lg font-bold shadow-lg hover:bg-sky-50 transition-colors">
-                    Login / Refresh
-                </button>
+                <i class="ph ph-lock-key text-5xl text-white/90 mb-4 block"></i>
+                <h2 class="text-xl font-bold mb-2 text-accent drop-shadow-sm">SWIFT Login</h2>
+                <p class="text-white/70 text-sm mb-6" id="login-message">Sign in to manage your data.</p>
+                
+                <form id="form-login" class="space-y-4 text-left">
+                    <div>
+                        <input type="email" id="login-email" required placeholder="Email Address" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/20 text-white placeholder-white/60 focus:bg-black/30 outline-none text-sm shadow-inner" />
+                    </div>
+                    <div>
+                        <input type="password" id="login-pass" required placeholder="Password" class="w-full border border-white/30 p-3.5 rounded-lg bg-black/20 text-white placeholder-white/60 focus:bg-black/30 outline-none text-sm shadow-inner" />
+                    </div>
+                    <div class="bg-red-500/20 border border-red-500/50 p-3 rounded-lg text-xs text-center text-white hidden" id="login-error-details"></div>
+                    
+                    <button type="submit" id="btn-login" class="w-full mt-2 bg-white text-primary p-3.5 rounded-xl font-bold shadow-lg hover:bg-sky-50 transition-colors flex justify-center items-center gap-2 uppercase tracking-wide">
+                        Sign In
+                    </button>
+                </form>
             </div>
 
             <!-- Dashboard -->
@@ -158,16 +173,17 @@
                     <div class="glass-panel p-5 rounded-xl space-y-4">
                         <h3 class="font-bold text-white border-b border-white/20 pb-2">Location Setup</h3>
                         <div class="grid grid-cols-2 gap-3">
-                            <select required id="af-district" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white outline-none text-sm shadow-sm">
-                                <option value="" disabled selected class="text-slate-800 bg-white">Select District</option>
-                                <!-- Districts injected here -->
-                            </select>
+                            <div class="w-full relative">
+                                <input required type="text" id="af-district" list="districts-list" placeholder="Search District" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white placeholder-white/70 outline-none text-sm shadow-sm" autocomplete="off" />
+                                <datalist id="districts-list">
+                                    <!-- Districts injected here -->
+                                </datalist>
+                            </div>
                             <select required id="af-mun" class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white/50 outline-none text-sm shadow-sm" disabled>
                                 <option value="" disabled selected class="text-slate-800 bg-white">Municipality</option>
                                 <!-- Municipalities injected here -->
                             </select>
                         </div>
-                        <input type="text" id="af-custom-mun" placeholder="Type Municipality Manually..." class="w-full border border-white/30 p-3.5 rounded-lg bg-white/10 text-white outline-none text-sm hidden" />
                         
                         <select required id="af-ward" class="w-full border border-white/30 p-3.5 rounded-lg bg-[#2a8cbd] text-white outline-none text-sm shadow-sm">
                             <option value="" disabled selected class="text-slate-800 bg-white">Ward No.</option>
@@ -485,6 +501,14 @@
                     <input type="file" accept="image/*" class="hidden" id="settings-logo-input" />
                     <p class="text-[10px] text-white/70 mt-5 font-medium">Used across reports and the main dashboard header.</p>
                 </div>
+                
+                <!-- Logout section -->
+                <div class="glass-panel p-6 rounded-xl mt-4 text-center">
+                    <h3 class="font-bold text-white mb-4 text-sm uppercase tracking-widest text-red-400">Account</h3>
+                    <button id="btn-logout" class="w-full bg-red-500/20 text-red-500 border border-red-500/50 p-3 rounded-lg font-bold shadow-lg hover:bg-red-500/30 transition-colors">
+                        Log Out
+                    </button>
+                </div>
             </div>
 
         </main>
@@ -518,14 +542,14 @@
     <!-- Firebase & Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Switched anonymous to Email and Password as per user request
+        import { getAuth, signInWithCustomToken, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Configuration & Initialization ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-poultry-app';
         
-        // Use injected secure canvas config if available, otherwise fallback to the user's provided config
         let firebaseConfig;
         if (typeof __firebase_config !== 'undefined') {
             firebaseConfig = JSON.parse(__firebase_config);
@@ -688,8 +712,8 @@
             let msg = `Error ${action}.`;
             if (err.code === 'permission-denied') {
                 msg = "Permission Denied! Ensure Firestore Rules allow read/write.";
-            } else if (err.code === 'auth/operation-not-allowed') {
-                msg = "Anonymous Sign-in is disabled in your Firebase console.";
+            } else if (err.code === 'auth/invalid-credential') {
+                msg = "Invalid email or password.";
             } else {
                 msg = err.message;
             }
@@ -856,34 +880,41 @@
 
             document.querySelectorAll('.farm-card').forEach(card => card.addEventListener('click', (e) => navigateTo('farm-details', { farm: state.farms.find(f => f.id === e.currentTarget.getAttribute('data-id')) })));
         }
+        
         document.getElementById('farm-search').addEventListener('input', renderFarmsList);
 
+        // Updated for suggestive District/strict Municipality selection
         function renderAddFarmInit() {
-            const distSelect = document.getElementById('af-district');
+            const distInput = document.getElementById('af-district');
+            const dataList = document.getElementById('districts-list');
             const wardSelect = document.getElementById('af-ward');
             
-            if(distSelect.options.length <= 1) {
-                Object.keys(nepalLocations).sort().forEach(d => distSelect.add(new Option(d, d, false, false)));
+            // Populate datalist once
+            if(dataList.options.length === 0) {
+                Object.keys(nepalLocations).sort().forEach(d => {
+                    const option = document.createElement('option');
+                    option.value = d;
+                    dataList.appendChild(option);
+                });
+                
                 for(let i=1; i<=35; i++) wardSelect.add(new Option(i, i, false, false));
                 
-                distSelect.addEventListener('change', (e) => {
+                distInput.addEventListener('input', (e) => {
+                    const val = e.target.value;
                     const munSelect = document.getElementById('af-mun');
                     munSelect.innerHTML = '<option value="" disabled selected class="text-slate-800 bg-white">Municipality</option>';
-                    if(e.target.value) {
-                        nepalLocations[e.target.value].sort().forEach(m => munSelect.add(new Option(m, m, false, false)));
-                        munSelect.add(new Option("+ Type Manually...", "CUSTOM", false, false));
+                    
+                    if(nepalLocations[val]) {
+                        // Populate accurate municipalities 
+                        nepalLocations[val].sort().forEach(m => munSelect.add(new Option(m, m, false, false)));
                         munSelect.disabled = false;
                         munSelect.classList.replace('bg-white/10', 'bg-[#2a8cbd]');
                         munSelect.classList.replace('text-white/50', 'text-white');
-                    }
-                });
-
-                document.getElementById('af-mun').addEventListener('change', (e) => {
-                    if(e.target.value === 'CUSTOM') {
-                        e.target.classList.add('hidden');
-                        document.getElementById('af-custom-mun').classList.remove('hidden');
-                        document.getElementById('af-custom-mun').required = true;
-                        e.target.required = false;
+                    } else {
+                        // Lock it down if input doesn't match an actual district
+                        munSelect.disabled = true;
+                        munSelect.classList.replace('bg-[#2a8cbd]', 'bg-white/10');
+                        munSelect.classList.replace('text-white', 'text-white/50');
                     }
                 });
             }
@@ -1118,16 +1149,13 @@
             const btn = document.getElementById('btn-save-farm');
             btn.textContent = "Saving..."; btn.disabled = true;
 
-            const isCustomMun = document.getElementById('af-mun').classList.contains('hidden');
-            const munValue = isCustomMun ? document.getElementById('af-custom-mun').value : document.getElementById('af-mun').value;
-
             const payload = {
                 name: document.getElementById('af-name').value,
                 owner: document.getElementById('af-owner').value,
                 phone: document.getElementById('af-phone').value,
                 type: document.getElementById('af-type').value,
                 district: document.getElementById('af-district').value,
-                municipality: munValue,
+                municipality: document.getElementById('af-mun').value,
                 ward: document.getElementById('af-ward').value,
                 lat: farmLoc.lat, lng: farmLoc.lng,
                 createdAt: serverTimestamp()
@@ -1263,7 +1291,7 @@
             finally { btn.innerHTML = '<i class="ph-fill ph-check-circle text-xl"></i> Save Visit Record'; btn.disabled = false; }
         });
 
-        // --- Settings (Logo Upload) ---
+        // --- Settings (Logo Upload & Logout) ---
         document.getElementById('btn-trigger-logo').addEventListener('click', () => document.getElementById('settings-logo-input').click());
         document.getElementById('settings-logo-input').addEventListener('change', async (e) => {
             const file = e.target.files[0];
@@ -1276,6 +1304,11 @@
                 showToast("Logo updated", "success");
             } catch(err) { handleFirebaseError("updating logo", err); }
             finally { btn.textContent = "Upload Custom Logo"; btn.disabled = false; }
+        });
+
+        document.getElementById('btn-logout').addEventListener('click', async () => {
+            await signOut(auth);
+            showToast("Logged out successfully", "success");
         });
 
         // --- Excel Export (SheetJS) ---
@@ -1315,33 +1348,70 @@
         });
 
 
-        // --- Authentication & Initialization ---
+        // --- Authentication Login Form Handling ---
+        document.getElementById('form-login').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-login');
+            const errBox = document.getElementById('login-error-details');
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-pass').value;
+
+            btn.innerHTML = '<div class="loader inline-block w-4 h-4 border-2"></div> Logging in...';
+            btn.disabled = true;
+            errBox.classList.add('hidden');
+
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                console.error("Login Exception:", err);
+                
+                // Show specific helpful error if it relates to Firebase configurations
+                if(err.code === 'auth/api-key-not-valid') {
+                     errBox.innerHTML = '<strong>API Key Invalid!</strong><br/>Please update your <code>firebaseConfig</code> with a valid key from Firebase Project Settings.';
+                } else if(err.code === 'auth/invalid-credential') {
+                     errBox.innerHTML = 'Incorrect email or password.';
+                } else {
+                     errBox.textContent = err.message;
+                }
+                
+                errBox.classList.remove('hidden');
+                btn.innerHTML = 'Sign In';
+                btn.disabled = false;
+            }
+        });
+
         window.addEventListener('online', () => { document.getElementById('network-status').innerHTML = '<i class="ph ph-wifi-high text-white/90"></i>'; document.getElementById('network-status').className="bg-white/10 p-2 rounded-xl border border-white/10 shadow-sm";});
         window.addEventListener('offline', () => { document.getElementById('network-status').innerHTML = '<i class="ph ph-wifi-slash text-red-400"></i>'; document.getElementById('network-status').className="bg-red-500/20 p-2 rounded-xl border border-red-500/30 shadow-sm"; });
 
         const initApp = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-                else await signInAnonymously(auth);
-            } catch (err) {
-                console.error("Auth Exception:", err);
-                document.getElementById('view-loading').classList.add('hidden');
-                document.getElementById('view-login').classList.remove('hidden');
-                
-                // Add explicit error breakdown to help debug missing Anonymous auth
-                if(err.code === 'auth/operation-not-allowed') {
-                    document.getElementById('login-message').innerHTML = '<span class="text-red-400 font-bold">Anonymous Login Not Enabled!</span><br/>Please open your Firebase console, go to <b>Authentication > Sign-in method</b>, and enable "Anonymous".';
-                } else {
-                    document.getElementById('login-error-details').classList.remove('hidden');
-                    document.getElementById('login-error-details').textContent = err.message;
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch (e) {
+                    console.log("Custom token failed, falling back to login prompt");
                 }
-                showToast("Authentication Failed", "error");
             }
+            // State handler will switch views
         };
 
         onAuthStateChanged(auth, (user) => {
-            if (user) { state.user = user; setupListeners(user.uid); } 
-            else { state.user = null; state.unsubs.forEach(u => u()); state.unsubs = []; }
+            if (user) { 
+                state.user = user; 
+                document.getElementById('view-login').classList.add('hidden');
+                setupListeners(user.uid); 
+            } 
+            else { 
+                state.user = null; 
+                state.unsubs.forEach(u => u()); state.unsubs = []; 
+                document.getElementById('view-loading').classList.add('hidden');
+                document.querySelectorAll('main > div').forEach(el => el.classList.add('hidden'));
+                document.getElementById('view-login').classList.remove('hidden');
+                
+                // Reset Login Button UI
+                const btn = document.getElementById('btn-login');
+                btn.innerHTML = 'Sign In';
+                btn.disabled = false;
+            }
         });
 
         function setupListeners(uid) {
